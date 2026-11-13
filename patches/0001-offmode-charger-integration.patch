@@ -1,0 +1,89 @@
+diff --git a/drivers/power/Kconfig b/drivers/power/Kconfig
+index 67b9ef4..e544340 100644
+--- a/drivers/power/Kconfig
++++ b/drivers/power/Kconfig
+@@ -1,3 +1,5 @@
+ source "drivers/power/avs/Kconfig"
+ source "drivers/power/reset/Kconfig"
++source "drivers/power/supply/offmode_charger/Kconfig"
++
+ source "drivers/power/supply/Kconfig"
+diff --git a/drivers/power/supply/Makefile b/drivers/power/supply/Makefile
+index 30acf6b..4e7243e 100644
+--- a/drivers/power/supply/Makefile
++++ b/drivers/power/supply/Makefile
+@@ -6,6 +6,8 @@ power_supply-$(CONFIG_SYSFS)		+= power_supply_sysfs.o
+ power_supply-$(CONFIG_LEDS_TRIGGERS)	+= power_supply_leds.o
+ 
+ obj-$(CONFIG_POWER_SUPPLY)	+= power_supply.o
++
++obj-$(CONFIG_OFFMODE_CHARGER)	+= offmode_charger/
+ obj-$(CONFIG_GENERIC_ADC_BATTERY)	+= generic-adc-battery.o
+ 
+ obj-$(CONFIG_PDA_POWER)		+= pda_power.o
+diff --git a/init/main.c b/init/main.c
+index 4232747..db12f71 100644
+--- a/init/main.c
++++ b/init/main.c
+@@ -27,6 +27,7 @@
+ #include <linux/initrd.h>
+ #include <linux/bootmem.h>
+ #include <linux/acpi.h>
++#include <linux/offmode_charger.h>
+ #include <linux/console.h>
+ #include <linux/nmi.h>
+ #include <linux/percpu.h>
+@@ -1103,6 +1104,14 @@ static int __ref kernel_init(void *unused)
+ 
+ 	rcu_end_inkernel_boot();
+ 
++	/*
++	 * Off-mode charging: when the bootloader asked for charger mode run
++	 * the charging UI right here instead of starting init.  It returns
++	 * only when the user asked for a normal boot.
++	 */
++	if (offmode_charger_init())
++		offmode_charger_start();
++
+ 	if (ramdisk_execute_command) {
+ 		ret = run_init_process(ramdisk_execute_command);
+ 		if (!ret)
+diff --git a/techpack/display/msm/msm_fbdev.c b/techpack/display/msm/msm_fbdev.c
+index 78f804c..e18e02a 100644
+--- a/techpack/display/msm/msm_fbdev.c
++++ b/techpack/display/msm/msm_fbdev.c
+@@ -185,9 +185,31 @@ struct drm_fb_helper *msm_fbdev_init(struct drm_device *dev)
+ 		goto fail;
+ 	}
+ 
+-	ret = drm_fb_helper_single_add_all_connectors(helper);
+-	if (ret)
+-		goto fini;
++	{
++		struct drm_connector_list_iter conn_iter;
++		struct drm_connector *connector;
++
++		drm_connector_list_iter_begin(dev, &conn_iter);
++		drm_for_each_connector_iter(connector, &conn_iter) {
++			/*
++			 * The writeback connector is listed first on some
++			 * device trees; binding fbdev to it would leave the
++			 * real panel without a framebuffer, so skip it.
++			 */
++			if (connector->connector_type ==
++			    DRM_MODE_CONNECTOR_WRITEBACK)
++				continue;
++
++			ret = drm_fb_helper_add_one_connector(helper,
++							      connector);
++			if (ret)
++				break;
++		}
++		drm_connector_list_iter_end(&conn_iter);
++
++		if (ret)
++			goto fini;
++	}
+ 
+ 	ret = drm_fb_helper_initial_config(helper, 32);
+ 	if (ret)

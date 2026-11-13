@@ -60,7 +60,7 @@ static char pclog_buf[PCLOG_CHANS][PCLOG_BUF_SIZE];
 static size_t pclog_len[PCLOG_CHANS];
 static unsigned int pclog_dropped[PCLOG_CHANS];
 static bool pclog_wrote;
-static bool pclog_open_logged[PCLOG_CHANS];
+static int pclog_open_err[PCLOG_CHANS];
 static int pclog_mkdir_err;
 static struct task_struct *pclog_task;
 static unsigned long pclog_next_mkdir;
@@ -222,8 +222,8 @@ static void pclog_write_chan(enum pclog_chan chan)
 		if (err == -ENOENT)
 			pclog_prepare_dir();
 
-		if (!pclog_open_logged[chan]) {
-			pclog_open_logged[chan] = true;
+		if (err != pclog_open_err[chan]) {
+			pclog_open_err[chan] = err;
 			offmode_charger_drv("cannot open %s: %d",
 					    pclog_path[chan], err);
 		}
