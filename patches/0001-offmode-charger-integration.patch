@@ -49,10 +49,10 @@ index 4232747..db12f71 100644
  		ret = run_init_process(ramdisk_execute_command);
  		if (!ret)
 diff --git a/techpack/display/msm/msm_fbdev.c b/techpack/display/msm/msm_fbdev.c
-index 78f804c..e18e02a 100644
+index 78f804c..9e642e4 100644
 --- a/techpack/display/msm/msm_fbdev.c
 +++ b/techpack/display/msm/msm_fbdev.c
-@@ -185,9 +185,31 @@ struct drm_fb_helper *msm_fbdev_init(struct drm_device *dev)
+@@ -185,9 +185,33 @@ struct drm_fb_helper *msm_fbdev_init(struct drm_device *dev)
  		goto fail;
  	}
  
@@ -66,12 +66,14 @@ index 78f804c..e18e02a 100644
 +		drm_connector_list_iter_begin(dev, &conn_iter);
 +		drm_for_each_connector_iter(connector, &conn_iter) {
 +			/*
-+			 * The writeback connector is listed first on some
-+			 * device trees; binding fbdev to it would leave the
-+			 * real panel without a framebuffer, so skip it.
++			 * The writeback connector (VIRTUAL on msm) is listed
++			 * first on some device trees; binding fbdev to it would
++			 * leave the real panel without a framebuffer.
 +			 */
 +			if (connector->connector_type ==
-+			    DRM_MODE_CONNECTOR_WRITEBACK)
++			    DRM_MODE_CONNECTOR_WRITEBACK ||
++			    connector->connector_type ==
++			    DRM_MODE_CONNECTOR_VIRTUAL)
 +				continue;
 +
 +			ret = drm_fb_helper_add_one_connector(helper,
