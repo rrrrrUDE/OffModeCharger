@@ -24,10 +24,16 @@
 
 #ifdef CONFIG_OFFMODE_CHARGER
 
+bool offmode_charger_requested(void);
 bool offmode_charger_init(void);
 void offmode_charger_start(void);
 
 #else /* !CONFIG_OFFMODE_CHARGER */
+
+static inline bool offmode_charger_requested(void)
+{
+	return false;
+}
 
 static inline bool offmode_charger_init(void)
 {

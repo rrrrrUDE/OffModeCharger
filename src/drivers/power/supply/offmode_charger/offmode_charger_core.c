@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/power_supply.h>
 #include <linux/reboot.h>
+#include <linux/reboot.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -87,7 +88,7 @@ static DECLARE_WAIT_QUEUE_HEAD(lpm_wait);
 static struct delayed_work lpm_boot_work;
 static void lpm_boot_work_fn(struct work_struct *work);
 static bool lpm_boot_requested;
-static bool lpm_wake_requested;
+static bool lpm_screen_toggle;
 static bool lpm_running;
 
 /* ------------------------------------------------------------------ */
@@ -125,6 +126,15 @@ static void lpm_dump_cmdline(void)
 		buf[n] = '\0';
 		pcdrv("cmdline[%d]: %s", i, buf);
 	}
+}
+
+/*
+ * True when the bootloader booted us in charger mode.  Safe to call before
+ * kernel_init() runs, so the DRM fbdev glue can use it at probe time.
+ */
+bool offmode_charger_requested(void)
+{
+	return lpm_cmdline_is_charger();
 }
 
 bool offmode_charger_init(void)
@@ -417,7 +427,7 @@ static void lpm_input_event(struct input_handle *handle, unsigned int type,
 		/* released before the hold timeout: a short press */
 		if (cancel_delayed_work(&lpm_boot_work) &&
 		    !READ_ONCE(lpm_boot_requested)) {
-			WRITE_ONCE(lpm_wake_requested, true);
+			WRITE_ONCE(lpm_screen_toggle, true);
 			wake_up(&lpm_wait);
 		}
 	}
@@ -770,11 +780,15 @@ void offmode_charger_start(void)
 		if (!ctx.usb)
 			ctx.usb = lpm_get_charger_psy();
 
-		if (READ_ONCE(lpm_wake_requested)) {
-			WRITE_ONCE(lpm_wake_requested, false);
-			if (!screen_on) {
-				offmode_charger_display_blank(false);
+		if (READ_ONCE(lpm_screen_toggle)) {
+			WRITE_ONCE(lpm_screen_toggle, false);
+			if (screen_on) {
+				screen_on = false;
+				offmode_charger_display_blank(true);
+				pcdrv("screen off (power key)");
+			} else {
 				screen_on = true;
+				offmode_charger_display_blank(false);
 				pcdrv("screen on (power key)");
 			}
 			screen_deadline = jiffies +
@@ -823,7 +837,7 @@ void offmode_charger_start(void)
 
 		wait_event_timeout(lpm_wait,
 				   READ_ONCE(lpm_boot_requested) ||
-				   READ_ONCE(lpm_wake_requested),
+				   READ_ONCE(lpm_screen_toggle),
 				   msecs_to_jiffies(LPM_ANIM_MS));
 		anim = !anim;
 	}
@@ -838,7 +852,6 @@ out:
 	if (console_off)
 		resume_console();
 	lpm_input_unregister();
-	lpm_rewrite_cmdline();
 
 	if (ctx.batt)
 		power_supply_put(ctx.batt);
@@ -846,6 +859,20 @@ out:
 		power_supply_put(ctx.usb);
 
 	lpm_running = false;
+
+	/*
+	 * The user asked for a normal boot: restart the machine instead of
+	 * rewriting the command line and continuing into init.  The
+	 * bootloader then starts a clean boot without charger mode, so the
+	 * fbdev connector selection is back to the stock one.
+	 */
+	if (READ_ONCE(lpm_boot_requested)) {
+		pcdrv("restarting the system for a normal boot");
+		offmode_charger_log_flush();
+		kernel_restart(NULL);
+	}
+
+	lpm_rewrite_cmdline();
 	pcdrv("leaving off-mode charger UI");
 	offmode_charger_log_flush();
 }

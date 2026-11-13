@@ -49,27 +49,38 @@ index 4232747..db12f71 100644
  		ret = run_init_process(ramdisk_execute_command);
  		if (!ret)
 diff --git a/techpack/display/msm/msm_fbdev.c b/techpack/display/msm/msm_fbdev.c
-index 78f804c..9e642e4 100644
+index 78f804c..b703e42 100644
 --- a/techpack/display/msm/msm_fbdev.c
 +++ b/techpack/display/msm/msm_fbdev.c
-@@ -185,9 +185,33 @@ struct drm_fb_helper *msm_fbdev_init(struct drm_device *dev)
+@@ -21,6 +21,10 @@
+ #include <drm/drm_crtc.h>
+ #include <drm/drm_fb_helper.h>
+ 
++#if IS_ENABLED(CONFIG_OFFMODE_CHARGER)
++#include <linux/offmode_charger.h>
++#endif
++
+ #include "msm_drv.h"
+ #include "msm_kms.h"
+ 
+@@ -185,7 +189,37 @@ struct drm_fb_helper *msm_fbdev_init(struct drm_device *dev)
  		goto fail;
  	}
  
 -	ret = drm_fb_helper_single_add_all_connectors(helper);
--	if (ret)
--		goto fini;
-+	{
++#if IS_ENABLED(CONFIG_OFFMODE_CHARGER)
++	if (offmode_charger_requested()) {
 +		struct drm_connector_list_iter conn_iter;
 +		struct drm_connector *connector;
 +
++		/*
++		 * Charger mode draws into the real panel: the writeback
++		 * connector is listed first on some device trees and msm
++		 * registers it as VIRTUAL, so skip it.  Normal boots keep
++		 * the stock behaviour.
++		 */
 +		drm_connector_list_iter_begin(dev, &conn_iter);
 +		drm_for_each_connector_iter(connector, &conn_iter) {
-+			/*
-+			 * The writeback connector (VIRTUAL on msm) is listed
-+			 * first on some device trees; binding fbdev to it would
-+			 * leave the real panel without a framebuffer.
-+			 */
 +			if (connector->connector_type ==
 +			    DRM_MODE_CONNECTOR_WRITEBACK ||
 +			    connector->connector_type ==
@@ -82,10 +93,12 @@ index 78f804c..9e642e4 100644
 +				break;
 +		}
 +		drm_connector_list_iter_end(&conn_iter);
-+
-+		if (ret)
-+			goto fini;
++	} else
++#endif
++	{
++		ret = drm_fb_helper_single_add_all_connectors(helper);
 +	}
- 
- 	ret = drm_fb_helper_initial_config(helper, 32);
++
  	if (ret)
+ 		goto fini;
+ 

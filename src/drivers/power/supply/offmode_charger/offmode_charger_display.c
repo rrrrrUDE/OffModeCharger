@@ -10,6 +10,7 @@
 
 #define pr_fmt(fmt)	"offmode_charger: " fmt
 
+#include <linux/backlight.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/fb.h>
@@ -381,20 +382,60 @@ int offmode_charger_display_init(void)
  * Blank or unblank the panel.  Unblanking forces a full repaint, because
  * the state may have changed while the screen was off.
  */
+#if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE)
+static struct backlight_device *lpm_bl;
+static int lpm_bl_level = -1;
+#endif
+
+static void lpm_force_redraw(void)
+{
+	lpm_last_cap = -2;
+	lpm_last_status = -2;
+	lpm_last_online = -2;
+	lpm_last_present = -2;
+}
+
 int offmode_charger_display_blank(bool blank)
 {
 	int ret;
 
+#if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE)
+	if (!lpm_bl) {
+		lpm_bl = backlight_device_get_by_type(BACKLIGHT_RAW);
+		if (!lpm_bl)
+			lpm_bl = backlight_device_get_by_type(BACKLIGHT_PLATFORM);
+		if (lpm_bl)
+			pcdrv("backlight attached, max %d",
+			      lpm_bl->props.max_brightness);
+	}
+
+	/*
+	 * Blanking the panel through fb_blank() is not reversible on every
+	 * DRM driver (msm leaves the connector powered down), so dim the
+	 * backlight and keep the panel scanning the current frame instead.
+	 */
+	if (lpm_bl) {
+		if (blank) {
+			lpm_bl_level = lpm_bl->props.brightness;
+			backlight_device_set_brightness(lpm_bl, 0);
+		} else {
+			if (lpm_bl_level <= 0)
+				lpm_bl_level = lpm_bl->props.max_brightness;
+			backlight_device_set_brightness(lpm_bl, lpm_bl_level);
+			lpm_force_redraw();
+		}
+		return 0;
+	}
+#endif
+
 	if (!lpm_fb)
 		return -ENODEV;
 
-	ret = fb_blank(lpm_fb,
-		       blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
-	if (!blank) {
-		lpm_last_cap = -2;
-		lpm_last_status = -2;
-		lpm_last_online = -2;
-		lpm_last_present = -2;
+	if (blank) {
+		ret = fb_blank(lpm_fb, FB_BLANK_POWERDOWN);
+	} else {
+		ret = fb_blank(lpm_fb, FB_BLANK_UNBLANK);
+		lpm_force_redraw();
 	}
 
 	return ret;
