@@ -144,7 +144,7 @@ bool offmode_charger_init(void)
 	/*
 	 * Start the log writer and dump the command line on every boot, not
 	 * only in charger mode, so the decision is always traceable in
-	 * /data/adb/offmode_charger/driver.log.
+	 * /data/offmode_charger/driver.log.
 	 */
 	offmode_charger_log_start();
 	lpm_dump_cmdline();

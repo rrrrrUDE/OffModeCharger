@@ -46,13 +46,12 @@ enum pclog_chan {
 };
 
 static const char * const pclog_path[PCLOG_CHANS] = {
-	[PCLOG_DRIVER]  = "/data/adb/offmode_charger/driver.log",
-	[PCLOG_CHARGER] = "/data/adb/offmode_charger/charger.log",
+	[PCLOG_DRIVER]  = "/data/offmode_charger/driver.log",
+	[PCLOG_CHARGER] = "/data/offmode_charger/charger.log",
 };
 
 static const char * const pclog_dirs[] = {
-	"/data/adb",
-	"/data/adb/offmode_charger",
+	"/data/offmode_charger",
 };
 
 static DEFINE_SPINLOCK(pclog_lock);
@@ -85,8 +84,8 @@ static int pclog_mkdir(const char *path)
 	/*
 	 * set_fs() is gone since 5.10 and ksys_mkdir() cannot be handed a
 	 * kernel pointer safely anymore.  Rely on the directories being
-	 * present (Magisk creates /data/adb; the rest can come from an
-	 * init script).
+	 * present (create it from an init script, or with a Magisk
+	 * module).
 	 */
 	return -EOPNOTSUPP;
 #endif

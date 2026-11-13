@@ -24,7 +24,7 @@ config OFFMODE_CHARGER
 	  when the power key is held down.
 
 	  Normal events are written to the kernel log and appended to
-	  /data/adb/offmode_charger/driver.log and charger.log (the
+	  /data/offmode_charger/driver.log and charger.log (the
 	  files are written once /data has been mounted by init).
 
 	  Say Y to replace the user space charger/charged service on

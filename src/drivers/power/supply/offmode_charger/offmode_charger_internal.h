@@ -41,10 +41,10 @@ void offmode_charger_warn(const char *fmt, ...);	/* driver.log, pr_warn */
 void offmode_charger_log_start(void);
 void offmode_charger_log_flush(void);
 
-/* charging events: kernel log + /data/adb/offmode_charger/charger.log */
+/* charging events: kernel log + /data/offmode_charger/charger.log */
 #define pclog(fmt, ...)		offmode_charger_log(fmt, ##__VA_ARGS__)
 
-/* driver plumbing: kernel log + /data/adb/offmode_charger/driver.log */
+/* driver plumbing: kernel log + /data/offmode_charger/driver.log */
 #define pcdrv(fmt, ...)		offmode_charger_drv(fmt, ##__VA_ARGS__)
 #define pcwarn(fmt, ...)	offmode_charger_warn(fmt, ##__VA_ARGS__)
 
