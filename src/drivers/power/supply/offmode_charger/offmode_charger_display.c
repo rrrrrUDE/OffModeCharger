@@ -26,6 +26,7 @@
 #define LPM_FB_WAIT_MS	15000
 
 extern struct fb_info *registered_fb[];
+extern int num_registered_fb;
 
 static struct fb_info *lpm_fb;
 static u32 lpm_w, lpm_h, lpm_stride;
@@ -348,8 +349,11 @@ int offmode_charger_display_init(void)
 			break;
 		}
 
-		if (time_after(jiffies, timeout))
+		if (time_after(jiffies, timeout)) {
+			pcdrv("no framebuffer registered (num_registered_fb=%d)",
+			      num_registered_fb);
 			return -ENODEV;
+		}
 
 		msleep(100);
 	}

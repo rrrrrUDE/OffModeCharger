@@ -60,6 +60,8 @@ static char pclog_buf[PCLOG_CHANS][PCLOG_BUF_SIZE];
 static size_t pclog_len[PCLOG_CHANS];
 static unsigned int pclog_dropped[PCLOG_CHANS];
 static bool pclog_wrote;
+static bool pclog_open_logged[PCLOG_CHANS];
+static int pclog_mkdir_err;
 static struct task_struct *pclog_task;
 static unsigned long pclog_next_mkdir;
 
@@ -107,8 +109,14 @@ static void pclog_prepare_dir(void)
 	for (i = 0; i < ARRAY_SIZE(pclog_dirs); i++) {
 		int ret = pclog_mkdir(pclog_dirs[i]);
 
-		if (ret && ret != -EEXIST)
+		if (ret && ret != -EEXIST && ret != -ENOENT) {
+			if (ret != pclog_mkdir_err) {
+				pclog_mkdir_err = ret;
+				offmode_charger_drv("mkdir %s failed: %d",
+						    pclog_dirs[i], ret);
+			}
 			return;
+		}
 	}
 }
 
@@ -209,8 +217,16 @@ static void pclog_write_chan(enum pclog_chan chan)
 
 	f = filp_open(pclog_path[chan], O_WRONLY | O_CREAT | O_APPEND, 0644);
 	if (IS_ERR(f)) {
-		if (PTR_ERR(f) == -ENOENT)
+		int err = PTR_ERR(f);
+
+		if (err == -ENOENT)
 			pclog_prepare_dir();
+
+		if (!pclog_open_logged[chan]) {
+			pclog_open_logged[chan] = true;
+			offmode_charger_drv("cannot open %s: %d",
+					    pclog_path[chan], err);
+		}
 		kfree(tmp);
 		return;
 	}

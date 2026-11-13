@@ -606,11 +606,21 @@ static int lpm_ctl_setup(void)
 		if (!psy)
 			continue;
 
-		if (power_supply_property_is_writeable(psy,
-				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX) <= 0 ||
-		    power_supply_get_property(psy,
-				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &v) ||
-		    v.intval <= 0) {
+		if (power_supply_get_property(psy,
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+				&v) || v.intval <= 0) {
+			power_supply_put(psy);
+			continue;
+		}
+
+		/*
+		 * qcom's charger returns 0 from property_is_writeable() for
+		 * FCC even though set_property() handles it, so probe by
+		 * writing the current value back instead.
+		 */
+		if (power_supply_set_property(psy,
+				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+				&v)) {
 			power_supply_put(psy);
 			continue;
 		}

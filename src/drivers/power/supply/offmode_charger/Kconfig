@@ -11,6 +11,7 @@ menu "Off-mode charger"
 
 config OFFMODE_CHARGER
 	bool "Kernel level off-mode charger UI"
+	depends on DRM_FBDEV_EMULATION
 	depends on FB
 	help
 	  Run a minimal charging screen directly in the kernel when the
@@ -30,9 +31,9 @@ config OFFMODE_CHARGER
 	  devices whose bootloader enters charger mode through the
 	  kernel command line.  Say N otherwise.
 
-	  This needs a working framebuffer (CONFIG_FB plus
-	  CONFIG_DRM_FBDEV_EMULATION for the msm DRM driver, or any
-	  other fbdev provider).
+	  This option only shows up after CONFIG_DRM_FBDEV_EMULATION has
+	  been enabled: the msm DRM driver then registers the fbdev this
+	  UI draws into (that symbol also selects CONFIG_FB).
 
 config OFFMODE_CHARGER_DEBUG
 	bool "Verbose charger UI logging"
