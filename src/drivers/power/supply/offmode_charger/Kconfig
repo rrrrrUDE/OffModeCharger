@@ -36,20 +36,28 @@ config OFFMODE_CHARGER
 	  UI draws into (that symbol also selects CONFIG_FB).
 
 config OFFMODE_CHARGER_DEBUG
-	bool "Verbose charger UI logging"
+	bool "OffModeCharger debug mode"
 	depends on OFFMODE_CHARGER
 	default n
 	help
-	  Add verbose lines to the charger UI log: every power supply
-	  poll, every redraw and every input event.
+	  Enable debug messages for the off-mode charger driver.
 
-	  This option only shows up after OFFMODE_CHARGER has been
-	  enabled; without it only the normal events are logged, but
-	  they are still written to the kernel log and to
-	  /data/adb/offmode_charger/driver.log and charger.log.
+	  Debug messages are written to the kernel log and to driver.log
+	  and cover the driver internals:
 
-	  Only useful while debugging; the verbose lines are relatively
-	  chatty (one line per second while the charger UI is up).
-	  Say N for production builds.
+	    - power supply lookups (name hit and type fallback),
+	    - one line per 600 ms poll with capacity, status, battery
+	      temperature, presence and charger online,
+	    - power key events and the input device the handler bound to,
+	    - every full redraw of the screen,
+	    - every charge current change, including a failed FCC write.
+
+	  Normal events (boot mode and command line, power supplies ready,
+	  framebuffer, screen on/off, session progress and summary, and
+	  all errors) are logged regardless of this option.
+
+	  The debug messages are chatty - about 1.7 lines per second while
+	  the charger UI runs - and fill the 32 KiB driver.log buffer
+	  faster, so keep this disabled on production builds.
 
 endmenu
