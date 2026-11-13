@@ -26,6 +26,7 @@ struct offmode_charger_state {
 
 /* offmode_charger_display.c */
 int offmode_charger_display_init(void);
+int offmode_charger_display_blank(bool blank);
 void offmode_charger_display_update(const struct offmode_charger_state *st,
 				    bool anim);
 void offmode_charger_display_shutdown(void);

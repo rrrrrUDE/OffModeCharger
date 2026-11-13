@@ -47,6 +47,8 @@
 #define LPM_ANIM_MS		600
 /* How long the power key has to be held to boot normally. */
 #define LPM_BOOT_HOLD_MS	1500
+/* How long the screen stays on after entering the charger UI. */
+#define LPM_SCREEN_TIMEOUT_MS	10000
 
 extern char *saved_command_line;
 
@@ -85,6 +87,7 @@ static DECLARE_WAIT_QUEUE_HEAD(lpm_wait);
 static struct delayed_work lpm_boot_work;
 static void lpm_boot_work_fn(struct work_struct *work);
 static bool lpm_boot_requested;
+static bool lpm_wake_requested;
 static bool lpm_running;
 
 /* ------------------------------------------------------------------ */
@@ -407,11 +410,17 @@ static void lpm_input_event(struct input_handle *handle, unsigned int type,
 
 	pcdbg("power key event: value=%d", value);
 
-	if (value == 1)
+	if (value == 1) {
 		schedule_delayed_work(&lpm_boot_work,
 				      msecs_to_jiffies(LPM_BOOT_HOLD_MS));
-	else if (value == 0)
-		cancel_delayed_work(&lpm_boot_work);
+	} else if (value == 0) {
+		/* released before the hold timeout: a short press */
+		if (cancel_delayed_work(&lpm_boot_work) &&
+		    !READ_ONCE(lpm_boot_requested)) {
+			WRITE_ONCE(lpm_wake_requested, true);
+			wake_up(&lpm_wait);
+		}
+	}
 }
 
 static int lpm_input_connect(struct input_handler *handler,
@@ -727,8 +736,9 @@ void offmode_charger_start(void)
 {
 	struct lpm_ctx ctx = { NULL, NULL };
 	struct offmode_charger_state st = { 0 };
-	unsigned long deadline;
+	unsigned long deadline, screen_deadline;
 	bool anim = false;
+	bool screen_on = true;
 	bool seen_online = false;
 	bool console_off = false;
 	int off_ticks = 0;
@@ -754,10 +764,22 @@ void offmode_charger_start(void)
 	lpm_ctl_setup();
 
 	deadline = jiffies + msecs_to_jiffies(LPM_NO_CHARGER_BOOT_MS);
+	screen_deadline = jiffies + msecs_to_jiffies(LPM_SCREEN_TIMEOUT_MS);
 
 	for (;;) {
 		if (!ctx.usb)
 			ctx.usb = lpm_get_charger_psy();
+
+		if (READ_ONCE(lpm_wake_requested)) {
+			WRITE_ONCE(lpm_wake_requested, false);
+			if (!screen_on) {
+				offmode_charger_display_blank(false);
+				screen_on = true;
+				pcdrv("screen on (power key)");
+			}
+			screen_deadline = jiffies +
+				msecs_to_jiffies(LPM_SCREEN_TIMEOUT_MS);
+		}
 
 		lpm_read_state(&ctx, &st);
 		lpm_stats_sample(&st);
@@ -772,7 +794,14 @@ void offmode_charger_start(void)
 			off_ticks++;
 		}
 
-		offmode_charger_display_update(&st, anim);
+		if (screen_on && time_after(jiffies, screen_deadline)) {
+			screen_on = false;
+			offmode_charger_display_blank(true);
+			pcdrv("screen off");
+		}
+
+		if (screen_on)
+			offmode_charger_display_update(&st, anim);
 
 		if (READ_ONCE(lpm_boot_requested))
 			break;
@@ -792,13 +821,17 @@ void offmode_charger_start(void)
 			break;
 		}
 
-		wait_event_timeout(lpm_wait, READ_ONCE(lpm_boot_requested),
+		wait_event_timeout(lpm_wait,
+				   READ_ONCE(lpm_boot_requested) ||
+				   READ_ONCE(lpm_wake_requested),
 				   msecs_to_jiffies(LPM_ANIM_MS));
 		anim = !anim;
 	}
 
 out:
 	cancel_delayed_work_sync(&lpm_boot_work);
+	if (!screen_on)
+		offmode_charger_display_blank(false);
 	lpm_stats_report("ended", &st);
 	lpm_ctl_restore();
 	offmode_charger_display_shutdown();

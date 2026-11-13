@@ -377,6 +377,29 @@ int offmode_charger_display_init(void)
 
 	return 0;
 }
+/*
+ * Blank or unblank the panel.  Unblanking forces a full repaint, because
+ * the state may have changed while the screen was off.
+ */
+int offmode_charger_display_blank(bool blank)
+{
+	int ret;
+
+	if (!lpm_fb)
+		return -ENODEV;
+
+	ret = fb_blank(lpm_fb,
+		       blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
+	if (!blank) {
+		lpm_last_cap = -2;
+		lpm_last_status = -2;
+		lpm_last_online = -2;
+		lpm_last_present = -2;
+	}
+
+	return ret;
+}
+
 void offmode_charger_display_update(const struct offmode_charger_state *st, bool anim)
 {
 	struct lpm_layout lay;
